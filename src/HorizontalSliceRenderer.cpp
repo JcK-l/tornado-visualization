@@ -3,6 +3,7 @@
 //
 #include "HorizontalSliceRenderer.h"
 
+#include <QDir>
 #include <QOpenGLContext>
 #include <QOpenGLFunctions>
 #include <iostream>
@@ -57,17 +58,22 @@ auto HorizontalSliceRenderer::drawImage(QMatrix4x4 mvpMatrix) -> void {
 }
 
 auto HorizontalSliceRenderer::initOpenGLShaders() -> void {
-  if (!shaderProgram.addShaderFromSourceFile(
-          QOpenGLShader::Vertex, "../glsl/lines_vshader_imageRenderer.glsl")) {
+  QString shaderDir = QString::fromUtf8(std::getenv("SHADER_DIR"));
+  QString vertexShaderPath =
+      SHADER_DIR + QString("lines_vshader_imageRenderer.glsl");
+  QString fragmentShaderPath =
+      SHADER_DIR + QString("lines_fshader_imageRenderer.glsl");
+
+  if (!shaderProgram.addShaderFromSourceFile(QOpenGLShader::Vertex,
+                                             vertexShaderPath)) {
     std::cout << "Vertex shader error:\n"
               << shaderProgram.log().toStdString() << "\n"
               << std::flush;
     return;
   }
 
-  if (!shaderProgram.addShaderFromSourceFile(
-          QOpenGLShader::Fragment,
-          "../glsl/lines_fshader_imageRenderer.glsl")) {
+  if (!shaderProgram.addShaderFromSourceFile(QOpenGLShader::Fragment,
+                                             fragmentShaderPath)) {
     std::cout << "Fragment shader error:\n"
               << shaderProgram.log().toStdString() << "\n"
               << std::flush;
@@ -110,7 +116,7 @@ auto HorizontalSliceRenderer::setMode(Mode inMode) -> void {
 }
 
 auto HorizontalSliceRenderer::newTexture() -> void {
-  imageMapper->setImageSource("../j.jpg");
+  imageMapper->setImageSource(DATA_DIR + QString("j.jpg"));
   img = imageMapper->createImage(currentStep);  // some image
   texture->create();
   texture->setWrapMode(QOpenGLTexture::ClampToEdge);

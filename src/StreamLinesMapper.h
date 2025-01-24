@@ -6,8 +6,14 @@
 #define CODE5_STREAMLINESMAPPER_H
 
 #include <QVector3D>
+#include <mutex>
 
 #include "FlowDataSource.h"
+
+struct InterpolationResult {
+  bool success;
+  QVector3D value;
+};
 
 struct Point3D {
   Point3D(float x, float y, float z);
@@ -56,12 +62,12 @@ class StreamLinesMapper {
   auto helperFunctionStreamLines(const std::vector<QVector3D>&, int) -> void;
   auto helperFunctionPathLines(int) -> void;
   auto attachPathLines(const std::vector<QVector3D>&) -> void;
-  auto currentIntegration(QVector3D, QVector3D) -> QVector3D;
-  auto trilinearInterpolation(QVector3D) -> QVector3D;
+  auto currentIntegration(QVector3D, QVector3D) -> InterpolationResult;
+  auto trilinearInterpolation(QVector3D) -> InterpolationResult;
   auto calculateGridPoint(QVector3D) -> QVector3D;
-  auto eulerIntegration(QVector3D, QVector3D) -> QVector3D;
-  auto rungeKutta2Integration(QVector3D, QVector3D) -> QVector3D;
-  auto rungeKutta4Integration(QVector3D, QVector3D) -> QVector3D;
+  auto eulerIntegration(QVector3D, QVector3D) -> InterpolationResult;
+  auto rungeKutta2Integration(QVector3D, QVector3D) -> InterpolationResult;
+  auto rungeKutta4Integration(QVector3D, QVector3D) -> InterpolationResult;
 
   int pathLinesInterval;
 

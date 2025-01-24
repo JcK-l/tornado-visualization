@@ -4,8 +4,10 @@
 
 #include "StreamLinesRenderer.h"
 
+#include <QDir>
 #include <QOpenGLFunctions>
 #include <iostream>
+
 StreamLinesRenderer::StreamLinesRenderer()
     : vertexBuffer(QOpenGLBuffer::VertexBuffer),
       maxSteps(31),
@@ -105,17 +107,22 @@ auto StreamLinesRenderer::updateStreamLines() -> void {
 }
 
 auto StreamLinesRenderer::initOpenGLShaders() -> void {
-  if (!shaderProgram.addShaderFromSourceFile(
-          QOpenGLShader::Vertex, "../glsl/lines_vshader_streamRenderer.glsl")) {
+  QString shaderDir = QString::fromUtf8(std::getenv("SHADER_DIR"));
+  QString vertexShaderPath =
+      SHADER_DIR + QString("lines_vshader_streamRenderer.glsl");
+  QString fragmentShaderPath =
+      SHADER_DIR + QString("lines_fshader_streamRenderer.glsl");
+
+  if (!shaderProgram.addShaderFromSourceFile(QOpenGLShader::Vertex,
+                                             vertexShaderPath)) {
     std::cout << "Vertex shader error:\n"
               << shaderProgram.log().toStdString() << "\n"
               << std::flush;
     return;
   }
 
-  if (!shaderProgram.addShaderFromSourceFile(
-          QOpenGLShader::Fragment,
-          "../glsl/lines_fshader_streamRenderer.glsl")) {
+  if (!shaderProgram.addShaderFromSourceFile(QOpenGLShader::Fragment,
+                                             fragmentShaderPath)) {
     std::cout << "Fragment shader error:\n"
               << shaderProgram.log().toStdString() << "\n"
               << std::flush;

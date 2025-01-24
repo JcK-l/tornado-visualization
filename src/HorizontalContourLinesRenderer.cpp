@@ -4,6 +4,7 @@
 
 #include "HorizontalContourLinesRenderer.h"
 
+#include <QDir>
 #include <QOpenGLContext>
 #include <QOpenGLFunctions>
 #include <iostream>
@@ -59,9 +60,10 @@ auto HorizontalContourLinesRenderer::drawContour(QMatrix4x4 mvpMatrix) -> void {
 
   // Issue OpenGL draw commands.
   QOpenGLFunctions* f = QOpenGLContext::currentContext()->functions();
-  //  f->glEnable(GL_BLEND);
-  //  f->glDepthMask(false);
-  f->glLineWidth(1);
+  // f->glEnable(GL_BLEND);
+  // f->glDepthMask(false);
+  // f->glLineWidth(1);
+  f->glLineWidth(2);
   f->glDrawArrays(GL_LINES, 0, isoLines.size());
 
   // Release objects until next render cycle.
@@ -70,18 +72,21 @@ auto HorizontalContourLinesRenderer::drawContour(QMatrix4x4 mvpMatrix) -> void {
 }
 
 auto HorizontalContourLinesRenderer::initOpenGLShaders() -> void {
-  if (!shaderProgram.addShaderFromSourceFile(
-          QOpenGLShader::Vertex,
-          "../glsl/lines_vshader_contourRenderer.glsl")) {
+  QString shaderDir = QString::fromUtf8(std::getenv("SHADER_DIR"));
+  QString vertexShaderPath =
+      SHADER_DIR + QString("lines_vshader_contourRenderer.glsl");
+  QString fragmentShaderPath = SHADER_DIR + QString("lines_fshader_contourRenderer.glsl");
+
+  if (!shaderProgram.addShaderFromSourceFile(QOpenGLShader::Vertex,
+                                             vertexShaderPath)) {
     std::cout << "Vertex shader error:\n"
               << shaderProgram.log().toStdString() << "\n"
               << std::flush;
     return;
   }
 
-  if (!shaderProgram.addShaderFromSourceFile(
-          QOpenGLShader::Fragment,
-          "../glsl/lines_fshader_contourRenderer.glsl")) {
+  if (!shaderProgram.addShaderFromSourceFile(QOpenGLShader::Fragment,
+                                             fragmentShaderPath)) {
     std::cout << "Fragment shader error:\n"
               << shaderProgram.log().toStdString() << "\n"
               << std::flush;
@@ -118,10 +123,18 @@ auto HorizontalContourLinesRenderer::setMaxSteps() -> void {
   updateIso();
 }
 
+auto HorizontalContourLinesRenderer::setCurrentStep(int step) -> void {
+  currentStep = step;
+ }
+
 auto HorizontalContourLinesRenderer::initContourLines() -> void {
   // Vertices of a unit cube that represents the bounding box.
 
   // Create vertex buffer and upload vertex data to buffer.
+  for (int i = 0; i < isoLines.size() - 1; ++i) {
+    //std::cout << "[" << isoLines.at(i).x() << "," << isoLines.at(i).y() << ","
+              //<< isoLines.at(i).z() << "]";
+  }
   vertexBuffer.bind();
   vertexBuffer.allocate(isoLines.data(), isoLines.size() * 3 * sizeof(float));
   vertexBuffer.release();
@@ -168,6 +181,7 @@ auto HorizontalContourLinesRenderer::updateIso() -> void {
         contourMapper->mapSliceToContourLineSegments(currentStep, isoValue));
     isoLinesSizes.append(isoLines.size());
   }
+
   initContourLines();
 }
 auto HorizontalContourLinesRenderer::addIsoLine() -> void {

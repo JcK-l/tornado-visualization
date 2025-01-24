@@ -48,24 +48,26 @@ auto StreamLinesMapper::helperFunctionPathLines(int ID) -> void {
     if (i % (maxThreads - 1) != ID) continue;
     QVector3D currentLocation = pathLinesSeeds.at(i);
     QVector3D prevLocation;
-    QVector3D seedValue;
-    try {
-      seedValue = trilinearInterpolation(currentLocation);
-    } catch (std::length_error& e) {
-      std::cerr << e.what() << std::endl;
-      exit(1);
-    }
+
+    auto [success1, seedValue] = trilinearInterpolation(currentLocation);
+    if (!success1) exit(1);
+
     prevLocation = currentLocation;
-    try {
-      currentLocation = currentIntegration(currentLocation, seedValue);
-      seedValue = trilinearInterpolation(currentLocation);
-      {
-        std::lock_guard<std::mutex> lock(templock);
-        tempSeeds.push_back(currentLocation);
-      }
-    } catch (std::length_error& e) {
-      continue;
+
+    InterpolationResult location =
+        currentIntegration(currentLocation, seedValue);
+    if (!location.success) continue;
+
+    currentLocation = location.value;
+    InterpolationResult seed = trilinearInterpolation(currentLocation);
+    if (!seed.success) continue;
+    
+    seedValue = seed.value;
+    {
+      std::lock_guard<std::mutex> lock(templock);
+      tempSeeds.push_back(currentLocation);
     }
+
     QVector3D direction = currentLocation - prevLocation;
     QVector3D tempValue = (currentLocation + QVector3D(1, 0, 0)) - prevLocation;
     direction.normalize();
@@ -114,21 +116,21 @@ auto StreamLinesMapper::helperFunctionStreamLines(
     if (i % (maxThreads - 1) != ID) continue;
     QVector3D currentLocation = seeds.at(i);
     QVector3D prevLocation;
-    QVector3D seedValue;
-    try {
-      seedValue = trilinearInterpolation(currentLocation);
-    } catch (std::length_error& e) {
-      std::cerr << e.what() << std::endl;
-      exit(1);
-    }
+
+    auto [success, seedValue] = trilinearInterpolation(currentLocation);
+    if (!success) exit(1);
+
     while (true) {
       prevLocation = currentLocation;
-      try {
-        currentLocation = currentIntegration(currentLocation, seedValue);
-        seedValue = trilinearInterpolation(currentLocation);
-      } catch (std::length_error& e) {
-        break;
-      }
+
+      InterpolationResult location =
+          currentIntegration(currentLocation, seedValue);
+      if (!location.success) break;
+      currentLocation = location.value;
+      InterpolationResult seed = trilinearInterpolation(currentLocation);
+      if (!seed.success) break;
+      seedValue = seed.value;
+
       temp.push_back(prevLocation / maxSteps);
       temp.push_back(currentLocation / maxSteps);
     }
@@ -144,20 +146,20 @@ auto StreamLinesMapper::shiftSeeds(std::vector<QVector3D> seeds)
   std::vector<QVector3D> temp;
   for (int i = 0; i < seeds.size(); i++) {
     QVector3D currentLocation = seeds.at(i);
-    QVector3D seedValue;
-    try {
-      seedValue = trilinearInterpolation(currentLocation);
-    } catch (std::length_error& e) {
-      std::cerr << e.what() << std::endl;
-      exit(1);
-    }
-    try {
-      currentLocation = currentIntegration(currentLocation, seedValue);
-      seedValue = trilinearInterpolation(currentLocation);
-      temp.push_back(currentLocation);
-    } catch (std::length_error& e) {
-      continue;
-    }
+
+    auto [success1, seedValue] = trilinearInterpolation(currentLocation);
+    if (!success1) exit(1);
+
+    auto location =
+        currentIntegration(currentLocation, seedValue);
+    if (!location.success) continue;
+    currentLocation = location.value;
+
+    auto seed = trilinearInterpolation(currentLocation);
+    if (!seed.success) continue;
+    seedValue = seed.value;
+
+    temp.push_back(currentLocation);
   }
   return temp;
 }
@@ -206,11 +208,12 @@ auto StreamLinesMapper::getPathLinesInterval() -> int {
   return pathLinesInterval;
 }
 
-auto StreamLinesMapper::trilinearInterpolation(QVector3D seed) -> QVector3D {
+auto StreamLinesMapper::trilinearInterpolation(QVector3D seed)
+    -> InterpolationResult {
   QVector3D gridPoint = calculateGridPoint(seed);
   if (std::max({gridPoint.x(), gridPoint.y(), gridPoint.z()}) > maxSteps - 1 ||
       std::min({gridPoint.x(), gridPoint.y(), gridPoint.z()}) < 0)
-    throw std::length_error("Seed is not in bounding box");
+    return {false, QVector3D(0, 0, 0)};
 
   Cube cube = Cube(gridPoint, dataSource, maxSteps);
 
@@ -231,7 +234,7 @@ auto StreamLinesMapper::trilinearInterpolation(QVector3D seed) -> QVector3D {
   QVector3D thirdInterpolation =
       (cube.z2 - seed.z()) / (cube.z2 - cube.z1) * firstInterpolation +
       (seed.z() - cube.z1) / (cube.z2 - cube.z1) * secondInterpolation;
-  return thirdInterpolation;
+  return {true, thirdInterpolation};
 }
 
 auto StreamLinesMapper::calculateGridPoint(QVector3D seed) -> QVector3D {
@@ -249,54 +252,49 @@ auto StreamLinesMapper::getDimension() -> int {
 auto StreamLinesMapper::getPathState() -> bool { return !isStreamLines; }
 
 auto StreamLinesMapper::eulerIntegration(QVector3D xt, QVector3D value)
-    -> QVector3D {
-  return xt + (t * value);
+    -> InterpolationResult {
+  return {true, xt + (t * value)};
 }
 
 auto StreamLinesMapper::rungeKutta2Integration(QVector3D xt, QVector3D value)
-    -> QVector3D {
+    -> InterpolationResult {
   QVector3D deltaX = t * (value);
   QVector3D vMidLoc = xt + (deltaX / 2);
-  QVector3D vMidVal = trilinearInterpolation(vMidLoc);
-  return xt + (t * vMidVal);
+  auto [success, vMidVal] = trilinearInterpolation(vMidLoc);
+  return {success, xt + (t * vMidVal)};
 }
 
 auto StreamLinesMapper::rungeKutta4Integration(QVector3D xt, QVector3D value)
-    -> QVector3D {
+    -> InterpolationResult {
   QVector3D k1, k2, k3, k4;
   QVector3D k2Loc, k3Loc, k4Loc;
-  QVector3D k2Val, k3Val, k4Val;
   k1 = t * value;
 
   k2Loc = xt + (k1 / 2);
-  try {
-    k2Val = trilinearInterpolation(k2Loc);
-  } catch (std::length_error& e) {
-    throw;
-  }
+
+  auto [success1, k2Val] = trilinearInterpolation(k2Loc);
+  if (!success1) return {false, QVector3D(0, 0, 0)};
+
   k2 = t * k2Val;
 
   k3Loc = xt + (k2 / 2);
-  try {
-    k3Val = trilinearInterpolation(k3Loc);
-  } catch (std::length_error& e) {
-    throw;
-  }
+  auto [success2, k3Val] = trilinearInterpolation(k3Loc);
+  if (!success2) return {false, QVector3D(0, 0, 0)};
+
   k3 = t * k3Val;
 
   k4Loc = xt + k3;
-  try {
-    k4Val = trilinearInterpolation(k4Loc);
-  } catch (std::length_error& e) {
-    throw;
-  }
+
+  auto [success3, k4Val] = trilinearInterpolation(k4Loc);
+  if (!success3) return {false, QVector3D(0, 0, 0)};
+
   k4 = t * k4Val;
 
-  return xt + (k1 / 6) + (k2 / 3) + (k3 / 3) + (k4 / 6);
+  return {true, xt + (k1 / 6) + (k2 / 3) + (k3 / 3) + (k4 / 6)};
 }
 
 auto StreamLinesMapper::currentIntegration(QVector3D start, QVector3D value)
-    -> QVector3D {
+    -> InterpolationResult {
   switch (integrationState) {
     case Euler:
       return eulerIntegration(start, value);
@@ -304,6 +302,8 @@ auto StreamLinesMapper::currentIntegration(QVector3D start, QVector3D value)
       return rungeKutta2Integration(start, value);
     case Kutta4:
       return rungeKutta4Integration(start, value);
+    default:
+      return eulerIntegration(start, value);
   }
 }
 
@@ -317,6 +317,9 @@ auto StreamLinesMapper::setCurrentIntegration(int direction) -> void {
       break;
     case Kutta4:
       integrationState = (direction < 0) ? Kutta2 : Euler;
+      break;
+    default:
+      integrationState = (direction < 0) ? Kutta4 : Kutta2;
       break;
   }
 }

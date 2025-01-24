@@ -1,4 +1,4 @@
-#version 330
+#version 460
 uniform mat4 mvpMatrix;
 uniform float currentStep;
 in vec4 vertexPosition;

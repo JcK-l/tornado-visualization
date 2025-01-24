@@ -66,7 +66,7 @@ auto HorizontalSliceToImageMapper::isHCL() -> bool { return isActive; }
 
 auto HorizontalSliceToImageMapper::mapSliceToImageHCL(int iz) -> QImage {
   QVector<QColor> colormap;
-  std::ifstream input("../colormap3.txt");
+  std::ifstream input(DATA_DIR + QString("colormap3.txt").toStdString());
   if (!input) {
     std::cerr << "file not found";
     exit(1);
@@ -97,8 +97,8 @@ auto HorizontalSliceToImageMapper::mapSliceToImageHCL(int iz) -> QImage {
   //     std::max(dataSource->getMaxValue(component),
   //     dataSource->getMaxBetrag());
   // min = dataSource->getMinValue(component);
-  max = 0.3;
-  min = -0.3;
+  max = 0.4;
+  min = -0.4;
   QImage image = QImage(dimension, dimension, QImage::Format_RGBA64);
   for (int i = 0; i < dimension; i++) {
     for (int j = 0; j < dimension; j++) {

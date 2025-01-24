@@ -19,7 +19,7 @@ OpenGLDisplayWidget::OpenGLDisplayWidget(QWidget *parent)
       frameCounter(0),
       fps(0),
       isAnimated(false),
-      framerateCap(30) {
+      framerateCap(60) {
   setFocusPolicy(Qt::StrongFocus);
 }
 
@@ -95,10 +95,10 @@ auto OpenGLDisplayWidget::paintGL() -> void {
   switch (addOn) {
     case IsoAndStream:
       streamLinesRenderer->drawStreamLines(mvpMatrix);
-      hcontourRenderer->drawContour(mvpMatrix);
+      activeContourRenderer->drawContour(mvpMatrix);
       break;
     case IsoLines:
-      hcontourRenderer->drawContour(mvpMatrix);
+      activeContourRenderer->drawContour(mvpMatrix);
       break;
     case StreamLines:
       streamLinesRenderer->drawStreamLines(mvpMatrix);
@@ -149,7 +149,8 @@ auto OpenGLDisplayWidget::mouseMoveEvent(QMouseEvent *e) -> void {
 auto OpenGLDisplayWidget::wheelEvent(QWheelEvent *e) -> void {
   // Update distance of the camera to the rendered visualization. The factor
   // "500" is arbitrary and controls that sensitivity of the mouse.
-  distanceToCamera += e->delta() / 500.;
+  //distanceToCamera += e->delta() / 500.;
+  distanceToCamera += e->angleDelta().y() / 500.0;
 
   // Update model-view-projection matrix with new distance to camera.
   updateMVPMatrix();
@@ -175,11 +176,11 @@ auto OpenGLDisplayWidget::timerEvent(QTimerEvent *event) -> void {
 
   switch (addOn) {
     case IsoAndStream:
-      hcontourRenderer->updateIso();
+      activeContourRenderer->updateIso();
       streamLinesRenderer->updateStreamLines();
       break;
     case IsoLines:
-      hcontourRenderer->updateIso();
+      activeContourRenderer->updateIso();
       break;
     case StreamLines:
       streamLinesRenderer->updateStreamLines();
@@ -226,12 +227,13 @@ auto OpenGLDisplayWidget::initVisualizationPipeline() -> void {
   hsliceMapper = new HorizontalSliceToImageMapper(flowDataSource);
   hcontourMapper = new HorizontalSliceToContourLineMapper(flowDataSource);
   streamLinesMapper = new StreamLinesMapper(flowDataSource);
-  hcontourRenderer = new ContourRendererGLSL(flowDataSource);
+  glslContourRenderer = new ContourRendererGLSL(flowDataSource);
 
   // Initialize rendering modules.
   bboxRenderer = new DataVolumeBoundingBoxRenderer();
   hsliceRenderer = new HorizontalSliceRenderer(hsliceMapper);
-  // hcontourRenderer = new HorizontalContourLinesRenderer(hcontourMapper);
+  hcontourRenderer = new HorizontalContourLinesRenderer(hcontourMapper);
+  activeContourRenderer = hcontourRenderer;
   streamLinesRenderer = new StreamLinesRenderer(streamLinesMapper);
   // ....
 }
@@ -253,7 +255,7 @@ auto OpenGLDisplayWidget::displayUI() -> void {
   switch (hsliceRenderer->getMode()) {
     case Data:
       dataUI(painter, 65, 165);
-      if (hcontourRenderer->getIsoState()) {
+      if (activeContourRenderer->getIsoState()) {
         title = QString("IsoEdit");
         activeIsoUI(painter, 5, 45);
       } else if (streamLinesRenderer->getStreamState()) {
@@ -305,7 +307,7 @@ auto OpenGLDisplayWidget::currentKeybindings(QKeyEvent *e) -> void {
     case Data:
       dataKeybinding(e);
     case Default:
-      if (hcontourRenderer->getIsoState()) {
+      if (activeContourRenderer->getIsoState()) {
         isoActiveKeybinding(e);
       } else if (streamLinesRenderer->getStreamState()) {
         streamActiveKeybinding(e);
@@ -335,21 +337,25 @@ auto OpenGLDisplayWidget::defaultKeybinding(QKeyEvent *e) -> void {
     case Qt::Key_Left:
       flowDataSource->setDimension(-8);
       hsliceRenderer->setMaxSteps();
+      glslContourRenderer->setMaxSteps();
       hcontourRenderer->setMaxSteps();
       streamLinesRenderer->setMaxSteps();
       break;
     case Qt::Key_Right:
       flowDataSource->setDimension(8);
       hsliceRenderer->setMaxSteps();
+      glslContourRenderer->setMaxSteps();
       hcontourRenderer->setMaxSteps();
       streamLinesRenderer->setMaxSteps();
       break;
     case Qt::Key_Down:
       hsliceRenderer->moveSlice(-1);
+      glslContourRenderer->moveSlice(-1);
       hcontourRenderer->moveSlice(-1);
       break;
     case Qt::Key_Up:
       hsliceRenderer->moveSlice(1);
+      glslContourRenderer->moveSlice(1);
       hcontourRenderer->moveSlice(1);
       break;
     case Qt::Key_M:
@@ -363,22 +369,26 @@ auto OpenGLDisplayWidget::dataKeybinding(QKeyEvent *e) -> void {
   switch (e->key()) {
     case Qt::Key_X:
       hsliceRenderer->setWindComponent(0);
+      glslContourRenderer->setWindComponent(0);
       hcontourRenderer->setWindComponent(0);
       break;
     case Qt::Key_Y:
       hsliceRenderer->setWindComponent(1);
+      glslContourRenderer->setWindComponent(1);
       hcontourRenderer->setWindComponent(1);
       break;
     case Qt::Key_Z:
       hsliceRenderer->setWindComponent(2);
+      glslContourRenderer->setWindComponent(2);
       hcontourRenderer->setWindComponent(2);
       break;
     case Qt::Key_B:
       hsliceRenderer->setWindComponent(3);
+      glslContourRenderer->setWindComponent(3);
       hcontourRenderer->setWindComponent(3);
       break;
     case Qt::Key_I:
-      hcontourRenderer->toggleIsoEdit(false);
+      activeContourRenderer->toggleIsoEdit(false);
       setAddOn(IsoLines);
       break;
     case Qt::Key_S:
@@ -389,14 +399,9 @@ auto OpenGLDisplayWidget::dataKeybinding(QKeyEvent *e) -> void {
       hsliceRenderer->toggleHCL(true);
       break;
     case Qt::Key_G:
-      hsliceRenderer->moveSlice(-flowDataSource->getDimension());
-      if (hcontourRenderer->isGLSL()) {
-        delete hcontourRenderer;
-        hcontourRenderer = new HorizontalContourLinesRenderer(hcontourMapper);
-      } else {
-        delete hcontourRenderer;
-        hcontourRenderer = new ContourRendererGLSL(flowDataSource);
-      }
+      //hsliceRenderer->moveSlice(-flowDataSource->getDimension());
+      isGLSL = !isGLSL;
+      activeContourRenderer = isGLSL ? glslContourRenderer : hcontourRenderer;
       break;
     case Qt::Key_1:
       if (!timer->isActive()) {
@@ -434,13 +439,13 @@ auto OpenGLDisplayWidget::isoKeybinding(QKeyEvent *e) -> void {
   switch (e->key()) {
     case Qt::Key_E:
       streamLinesRenderer->toggleStreamEdit(false);
-      hcontourRenderer->toggleIsoEdit(true);
+      activeContourRenderer->toggleIsoEdit(true);
       break;
     case Qt::Key_Plus:
-      hcontourRenderer->addIsoLine();
+      activeContourRenderer->addIsoLine();
       break;
     case Qt::Key_Minus:
-      hcontourRenderer->deleteIsoLine();
+      activeContourRenderer->deleteIsoLine();
       break;
   }
 }
@@ -448,20 +453,20 @@ auto OpenGLDisplayWidget::isoKeybinding(QKeyEvent *e) -> void {
 auto OpenGLDisplayWidget::isoActiveKeybinding(QKeyEvent *e) -> void {
   switch (e->key()) {
     case Qt::Key_Left:
-      hcontourRenderer->moveActiveIso(-0.02);
+      activeContourRenderer->moveActiveIso(-0.02);
       break;
     case Qt::Key_Right:
-      hcontourRenderer->moveActiveIso(0.02);
+      activeContourRenderer->moveActiveIso(0.02);
       break;
     case Qt::Key_Down:
-      hcontourRenderer->setActiveIso(-1);
+      activeContourRenderer->setActiveIso(-1);
       break;
     case Qt::Key_Up:
-      hcontourRenderer->setActiveIso(1);
+      activeContourRenderer->setActiveIso(1);
       break;
     case Qt::Key_M:
       setAddOn(None);
-      hcontourRenderer->toggleIsoEdit(false);
+      activeContourRenderer->toggleIsoEdit(false);
       hsliceRenderer->setMode(Data);
       break;
   }
@@ -492,7 +497,7 @@ auto OpenGLDisplayWidget::streamActiveKeybinding(QKeyEvent *e) -> void {
 auto OpenGLDisplayWidget::streamLineKeybinding(QKeyEvent *e) -> void {
   switch (e->key()) {
     case Qt::Key_U:
-      hcontourRenderer->toggleIsoEdit(false);
+      activeContourRenderer->toggleIsoEdit(false);
       streamLinesRenderer->toggleStreamEdit(true);
       break;
     case Qt::Key_P:
@@ -519,6 +524,8 @@ auto OpenGLDisplayWidget::streamLineKeybinding(QKeyEvent *e) -> void {
   }
 }
 
+const int marginRight = 250;
+
 auto OpenGLDisplayWidget::defaultUI(QPainter &painter, int left, int right)
     -> void {
   // Indicators
@@ -528,16 +535,20 @@ auto OpenGLDisplayWidget::defaultUI(QPainter &painter, int left, int right)
   painter.drawText(5, left + 20, width(), height(), Qt::AlignTop,
                    QString("maxSteps: %1").arg(flowDataSource->getDimension()));
   // default arrow keys
-  painter.drawText(width() - 200, right, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right, width(), height(), Qt::AlignTop,
                    QString("Increase Step: up"));
-  painter.drawText(width() - 200, right + 20, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right + 20, width(), height(),
+                   Qt::AlignTop,
                    QString("Decrease Step: down"));
-  painter.drawText(width() - 200, right + 40, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right + 40, width(), height(),
+                   Qt::AlignTop,
                    QString("Increase maxSteps: right"));
-  painter.drawText(width() - 200, right + 60, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right + 60, width(), height(),
+                   Qt::AlignTop,
                    QString("Decrease maxSteps: left"));
 
-  painter.drawText(width() - 200, right + 80, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right + 80, width(), height(),
+                   Qt::AlignTop,
                    QString("Toggle Mode: m"));
 }
 
@@ -551,54 +562,69 @@ auto OpenGLDisplayWidget::dataUI(QPainter &painter, int left, int right)
   painter.drawText(5, left + 40, width(), height(), Qt::AlignTop,
                    QString("FramerateCap: %1").arg(framerateCap));
   painter.drawText(5, left + 60, width(), height(), Qt::AlignTop,
-                   QString("GLSL: %1").arg(hcontourRenderer->isGLSL()));
+                   QString("GLSL: %1").arg(isGLSL));
   painter.drawText(5, left + 80, width(), height(), Qt::AlignTop,
                    QString("HCL: %1").arg(hsliceRenderer->isHCL()));
 
-  painter.drawText(width() - 200, right, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right, width(), height(),
+                   Qt::AlignTop,
                    QString("Toggle GLSL: g"));
-  painter.drawText(width() - 200, right + 20, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right + 20, width(), height(),
+                   Qt::AlignTop,
                    QString("Toggle HCL: h"));
-  painter.drawText(width() - 200, right + 40, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right + 40, width(), height(),
+                   Qt::AlignTop,
                    QString("Toggle IsoLines: i"));
-  painter.drawText(width() - 200, right + 60, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right + 60, width(), height(),
+                   Qt::AlignTop,
                    QString("Toggle StreamLines: s"));
-  painter.drawText(width() - 200, right + 80, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right + 80, width(), height(),
+                   Qt::AlignTop,
                    QString("Wind Component: x"));
-  painter.drawText(width() - 200, right + 100, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right + 100, width(), height(),
+                   Qt::AlignTop,
                    QString("Wind Component: y"));
-  painter.drawText(width() - 200, right + 120, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right + 120, width(), height(),
+                   Qt::AlignTop,
                    QString("Wind Component: z"));
-  painter.drawText(width() - 200, right + 140, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right + 140, width(), height(),
+                   Qt::AlignTop,
                    QString("Wind Component: b"));
-  painter.drawText(width() - 200, right + 160, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right + 160, width(), height(),
+                   Qt::AlignTop,
                    QString("Start Animation: 1"));
-  painter.drawText(width() - 200, right + 180, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right + 180, width(), height(),
+                   Qt::AlignTop,
                    QString("Stop Animation: 2"));
-  painter.drawText(width() - 200, right + 200, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right + 200, width(), height(),
+                   Qt::AlignTop,
                    QString("Decrease Animation: 3"));
-  painter.drawText(width() - 200, right + 220, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right + 220, width(), height(),
+                   Qt::AlignTop,
                    QString("Increase Animation: 4"));
 }
 
 auto OpenGLDisplayWidget::isoUI(QPainter &painter, int left, int right)
     -> void {
-  for (int i = 0; i < hcontourRenderer->getValuesArray().size(); i++) {
+  for (int i = 0; i < activeContourRenderer->getValuesArray().size(); i++) {
     painter.setPen(Qt::white);
-    if (i == hcontourRenderer->getCurrentActiveValue() &&
-        hcontourRenderer->getIsoState())
+    if (i == activeContourRenderer->getCurrentActiveValue() &&
+        activeContourRenderer->getIsoState())
       painter.setPen(Qt::red);
     painter.drawText(5, left + i * 20, width(), height(), Qt::AlignTop,
                      QString("C%1: %2").arg(i).arg(
-                         hcontourRenderer->getValuesArray().at(i)));
+                         activeContourRenderer->getValuesArray().at(i)));
   }
   painter.setPen(Qt::white);
 
-  painter.drawText(width() - 200, right, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right, width(), height(),
+                   Qt::AlignTop,
                    QString("Add IsoLine: +"));
-  painter.drawText(width() - 200, right + 20, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right + 20, width(), height(),
+                   Qt::AlignTop,
                    QString("Sub IsoLine: -"));
-  painter.drawText(width() - 200, right + 40, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right + 40, width(), height(),
+                   Qt::AlignTop,
                    QString("Edit IsoLines : e"));
 }
 
@@ -610,15 +636,20 @@ auto OpenGLDisplayWidget::activeIsoUI(QPainter &painter, int left, int right)
   painter.drawText(5, left + 20, width(), height(), Qt::AlignTop,
                    QString("maxSteps: %1").arg(flowDataSource->getDimension()));
   // edit Iso arrow keys
-  painter.drawText(width() - 200, right, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right, width(), height(),
+                   Qt::AlignTop,
                    QString("Select Active Iso: up"));
-  painter.drawText(width() - 200, right + 20, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right + 20, width(), height(),
+                   Qt::AlignTop,
                    QString("Select Active Iso: down"));
-  painter.drawText(width() - 200, right + 40, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right + 40, width(), height(),
+                   Qt::AlignTop,
                    QString("Increase Iso Value: right"));
-  painter.drawText(width() - 200, right + 60, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right + 60, width(), height(),
+                   Qt::AlignTop,
                    QString("Decrease Iso Value: left"));
-  painter.drawText(width() - 200, right + 80, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right + 80, width(), height(),
+                   Qt::AlignTop,
                    QString("Toggle Mode: m"));
 }
 
@@ -631,16 +662,21 @@ auto OpenGLDisplayWidget::activeStreamUI(QPainter &painter, int left, int right)
   painter.drawText(5, left + 20, width(), height(), Qt::AlignTop,
                    QString("maxSteps: %1").arg(flowDataSource->getDimension()));
   // default arrow keys
-  painter.drawText(width() - 200, right, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right, width(), height(),
+                   Qt::AlignTop,
                    QString("Increase T Value: up"));
-  painter.drawText(width() - 200, right + 20, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right + 20, width(), height(),
+                   Qt::AlignTop,
                    QString("Decrease T Value: down"));
-  painter.drawText(width() - 200, right + 40, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right + 40, width(), height(),
+                   Qt::AlignTop,
                    QString("Select Integration: right"));
-  painter.drawText(width() - 200, right + 60, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right + 60, width(), height(),
+                   Qt::AlignTop,
                    QString("Select Integration: left"));
 
-  painter.drawText(width() - 200, right + 80, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right + 80, width(), height(),
+                   Qt::AlignTop,
                    QString("Toggle Mode: m"));
 }
 
@@ -678,27 +714,35 @@ auto OpenGLDisplayWidget::streamLineUI(QPainter &painter, int left, int right)
                    QString("PathLines Interval: %1")
                        .arg(streamLinesRenderer->getPathLinesInterval()));
 
-  painter.drawText(width() - 200, right, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right, width(), height(),
+                   Qt::AlignTop,
                    QString("Edit Streamline: u"));
 
-  painter.drawText(width() - 200, right + 20, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right + 20, width(), height(),
+                   Qt::AlignTop,
                    QString("Toggle PathLines: p"));
 
-  painter.drawText(width() - 200, right + 40, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right + 40, width(), height(),
+                   Qt::AlignTop,
                    QString("Restart Lines: r"));
 
-  painter.drawText(width() - 200, right + 60, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right + 60, width(), height(),
+                   Qt::AlignTop,
                    QString("Toggle Shifting: o"));
 
-  painter.drawText(width() - 200, right + 80, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right + 80, width(), height(),
+                   Qt::AlignTop,
                    QString("Decrease Shift Interval: 5"));
 
-  painter.drawText(width() - 200, right + 100, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right + 100, width(), height(),
+                   Qt::AlignTop,
                    QString("Increase Shift Interval: 6"));
 
-  painter.drawText(width() - 200, right + 120, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right + 120, width(), height(),
+                   Qt::AlignTop,
                    QString("Decrease Path Interval: 7"));
 
-  painter.drawText(width() - 200, right + 140, width(), height(), Qt::AlignTop,
+  painter.drawText(width() - marginRight, right + 140, width(), height(),
+                   Qt::AlignTop,
                    QString("Increase Path Interval: 8"));
 }

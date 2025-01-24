@@ -1,4 +1,5 @@
-#version 330
+#version 460
+
 const int MAX_ISO_AMOUNT = 5;
 
 layout(location = 0) out vec4 fragColor;
@@ -14,9 +15,13 @@ void main()
     IsoSizes[currentActiveIso - 1] <= vertexID && vertexID < IsoSizes[currentActiveIso];
 
     if (isActiveIso){
-        fragColor = vec4(isoStateColor & 8, isoStateColor & 4, isoStateColor & 2, isoStateColor & 1);
+        fragColor = vec4(
+            float((isoStateColor & 8) >> 3),
+            float((isoStateColor & 4) >> 2),
+            float((isoStateColor & 2) >> 1),
+            float(isoStateColor & 1)
+        );
     } else {
         fragColor = vec4(1, 1, 1, 1);
     }
 }
-

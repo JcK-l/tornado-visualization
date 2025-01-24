@@ -30,6 +30,7 @@ class HorizontalContourLinesRenderer {
   virtual auto setMaxSteps() -> void;
   virtual auto setWindComponent(int ic) -> void;
   virtual auto isGLSL() -> bool;
+  auto setCurrentStep(int) -> void;
   auto setMapper(HorizontalSliceToContourLineMapper*) -> void;
   auto addIsoLine() -> void;
   auto deleteIsoLine() -> void;

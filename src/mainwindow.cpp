@@ -13,14 +13,14 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
   // Request an OpenGL context format compatible with version 3.3.
   QSurfaceFormat format;
 
-  format.setVersion(3, 3);
+  format.setVersion(4, 6);
 
   format.setProfile(QSurfaceFormat::CoreProfile);
 
   // Please uncomment if you use MacOS (source:
   // https://forum.qt.io/topic/75759/qopengl-on-mac-qcocoaglcontext-falling-back-to-unshared-context/3)
   format.setSwapInterval(0);                 // no v-sync pls <3
-  QSurfaceFormat::setDefaultFormat(format);  // only on macOS
+  //QSurfaceFormat::setDefaultFormat(format);  // only on macOS
 
   openGLDisplay->setFormat(format);
 

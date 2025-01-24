@@ -20,7 +20,7 @@ class ContourRendererGLSL : public HorizontalContourLinesRenderer {
 
  private:
   FlowDataSource* source;
-  int component;
+  int component = 0;
   QVector<QVector3D> input;
   FlowDataSource* datasource;
 };

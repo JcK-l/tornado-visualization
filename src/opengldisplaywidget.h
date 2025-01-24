@@ -39,6 +39,7 @@ class OpenGLDisplayWidget : public QOpenGLWidget {
 
  private:
   AddOn addOn;
+  bool isGLSL = false;
   bool isAnimated;
   int frame;
   int frameCounter;
@@ -89,6 +90,8 @@ class OpenGLDisplayWidget : public QOpenGLWidget {
   StreamLinesRenderer *streamLinesRenderer;
   HorizontalSliceRenderer *hsliceRenderer;
   HorizontalContourLinesRenderer *hcontourRenderer;
+  ContourRendererGLSL *glslContourRenderer;
+  HorizontalContourLinesRenderer *activeContourRenderer;
   StreamLinesMapper *streamLinesMapper;
   HorizontalSliceToContourLineMapper *hcontourMapper;
   HorizontalSliceToImageMapper *hsliceMapper;

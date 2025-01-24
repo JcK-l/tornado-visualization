@@ -1,6 +1,7 @@
 #include <QApplication>
 #include <QSurfaceFormat>
 
+#include "iostream"
 #include "mainwindow.h"
 
 auto main(int argc, char *argv[]) -> int {
@@ -9,6 +10,7 @@ auto main(int argc, char *argv[]) -> int {
   // main window into which we can embed the OpenGL display.
 
   QApplication a(argc, argv);
+
   MainWindow w;
   w.show();
 

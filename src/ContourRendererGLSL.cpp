@@ -1,5 +1,6 @@
 #include "ContourRendererGLSL.h"
 
+#include <QDir>
 #include <QOpenGLBuffer>
 #include <QOpenGLContext>
 #include <QOpenGLFunctions>
@@ -33,7 +34,7 @@ auto ContourRendererGLSL::drawContour(QMatrix4x4 mvpMatrix) -> void {
   // Issue OpenGL draw commands.
   QOpenGLFunctions* f = QOpenGLContext::currentContext()->functions();
 
-  f->glLineWidth(1);
+  f->glLineWidth(2);
 
   for (int i = 0; i < isoValues.size(); i++) {
     if (i == currentActiveValue && isActive) {
@@ -51,24 +52,31 @@ auto ContourRendererGLSL::drawContour(QMatrix4x4 mvpMatrix) -> void {
 }
 
 auto ContourRendererGLSL::initOpenGLShaders() -> void {
-  if (!shaderProgram.addShaderFromSourceFile(
-          QOpenGLShader::Vertex, "../glsl/marching_squares_vshader.glsl")) {
+  QString vertexShaderPath =
+      SHADER_DIR + QString("marching_squares_vshader.glsl");
+  QString fragmentShaderPath =
+      SHADER_DIR + QString("marching_squares_fshader.glsl");
+  QString geometryShaderPath =
+      SHADER_DIR + QString("marching_squares_gshader.glsl");
+
+  if (!shaderProgram.addShaderFromSourceFile(QOpenGLShader::Vertex,
+                                             vertexShaderPath)) {
     std::cout << "Vertex shader error:\n"
               << shaderProgram.log().toStdString() << "\n"
               << std::flush;
     return;
   }
 
-  if (!shaderProgram.addShaderFromSourceFile(
-          QOpenGLShader::Fragment, "../glsl/marching_squares_fshader.glsl")) {
+  if (!shaderProgram.addShaderFromSourceFile(QOpenGLShader::Fragment,
+                                             fragmentShaderPath)) {
     std::cout << "Fragment shader error:\n"
               << shaderProgram.log().toStdString() << "\n"
               << std::flush;
     return;
   }
 
-  if (!shaderProgram.addShaderFromSourceFile(
-          QOpenGLShader::Geometry, "../glsl/marching_squares_gshader.glsl")) {
+  if (!shaderProgram.addShaderFromSourceFile(QOpenGLShader::Geometry,
+                                             geometryShaderPath)) {
     std::cout << "Geometry shader error:\n"
               << shaderProgram.log().toStdString() << "\n"
               << std::flush;
